@@ -63,6 +63,7 @@ module market_addr::market {
     const ERR_NOT_EXPIRED: u64 = 18;
     const ERR_NOT_RESOLVED: u64 = 19;
     const ERR_PAYOUT_NOT_ENOUGH: u64 = 20;
+    const ERR_EMPTY_LIST: u64 = 21;
 
     // ======== Structs =========
 
@@ -106,6 +107,13 @@ module market_addr::market {
         withdraw_delay: u64 // Delay withdrawal period specified in seconds
     }
 
+    // Represents a request to withdraw APT from the liquidity pool
+    struct Request has store, drop {
+        sender: address, // Address of the user making the request
+        amount: u64, // APT amount to be sent out when available 
+        timestamp: u64 // Timestamp at which the request was made
+    }
+
     struct MarketManager has key {
         admin_list: vector<address>,
         extend_ref: ExtendRef,
@@ -121,7 +129,89 @@ module market_addr::market {
         max_bet_amount: u64, 
         max_odds: u64, // Cap the odds at a certain level
         treasury_address: address, // where all fees will be sent
-        is_paused: bool // whether the system is currently paused
+        is_paused: bool, // whether the system is currently paused
+        pending_fulfil: u64,
+        request_list: vector<Request>
+    }
+
+    #[event]
+    struct PlaceBetEvent has drop, store {
+        round: u64,
+        market_type: u8,
+        bet_outcome: u8,
+        bet_amount: u64,
+        placing_odds: u64,
+        timestamp: u64,
+        sender: address
+    }
+
+    #[event]
+    struct AddLiquidity has drop, store {
+        deposit_amount: u64,
+        lp_amount: u64,
+        timestamp: u64,
+        sender: address
+    }
+
+    #[event]
+    struct PayoutWinnersEvent has drop, store {
+        round: u64,
+        market_type: u8,
+        from_id: u64,
+        until_id: u64,
+        total_winners: u64,
+        total_payout_amount: u64,
+        timestamp: u64,
+        sender: address
+    }
+
+    #[event]
+    struct AddMarketEvent has drop, store {
+        round: u64,
+        market_type: u8,
+        probability_1: u64,
+        probability_2: u64,
+        probability_3: u64,
+        probability_4: u64,
+        expiration: u64,
+        timestamp: u64,
+        sender: address
+    }
+
+    #[event]
+    struct UpdateMarketEvent has drop, store {
+        round: u64,
+        market_type: u8,
+        probability_1: u64,
+        probability_2: u64,
+        probability_3: u64,
+        probability_4: u64,
+        timestamp: u64, 
+        sender: address
+    }
+
+    #[event]
+    struct ResolveMarketEvent has drop, store {
+        round: u64,
+        market_type: u8,
+        winning_outcome: u8, 
+        timestamp: u64, 
+        sender: address
+    }
+
+    #[event]
+    struct RequestWithdraw has drop, store {
+        lp_amount: u64,
+        withdraw_amount: u64,
+        sender: address,
+        timestamp: u64
+    }
+
+    #[event]
+    struct Redeem has drop, store { 
+        withdraw_amount: u64,
+        sender: address,
+        timestamp: u64
     }
 
     // Initializes the module
@@ -176,7 +266,9 @@ module market_addr::market {
             max_bet_amount: DEFAULT_MAX_BET_AMOUNT, 
             max_odds: DEFAULT_MAX_ODDS, 
             weight: DEFAULT_WEIGHT,
-            is_paused: false
+            is_paused: false,
+            pending_fulfil: 0,
+            request_list: vector::empty<Request>()
         });
 
     }
@@ -243,7 +335,18 @@ module market_addr::market {
         // Update the states
         global.liquidity_pool.used_bet_amount = global.liquidity_pool.used_bet_amount+bet_amount;
 
-        // emit event
+        // Emit an event 
+        event::emit(
+            PlaceBetEvent {
+                round,
+                market_type,
+                bet_outcome,
+                bet_amount,
+                placing_odds,
+                timestamp: timestamp::now_seconds(),  
+                sender: signer::address_of(sender)
+            }
+        )
 
     }
 
@@ -291,7 +394,90 @@ module market_addr::market {
 
         vault::mint(&config_object_signer, deposit_amount );
 
-        // emit event
+        // Emit an event 
+        event::emit(
+            AddLiquidity {
+                deposit_amount,
+                lp_amount: lp_amount_to_mint,
+                timestamp: timestamp::now_seconds(),  
+                sender: signer::address_of(sender)
+            }
+        )
+    }
+
+    // Initiates a withdrawal request by the sender
+    public entry fun request_withdraw(sender:&signer, lp_amount: u64 ) acquires MarketManager {
+        let global = borrow_global_mut<MarketManager>(@market_addr);
+        let config_object_signer = object::generate_signer_for_extending(&global.extend_ref);
+        assert!(global.is_paused == false, ERR_PAUSED);
+        assert!( primary_fungible_store::balance( signer::address_of(sender), global.liquidity_pool.lp_metadata ) >= lp_amount , ERR_INSUFFICIENT_AMOUNT );
+
+        let lp_supply = option::destroy_some(fungible_asset::supply(global.liquidity_pool.lp_metadata));
+        let total_vault_locked = primary_fungible_store::balance( signer::address_of(&config_object_signer), vault::get_vault_metadata() );
+        let current_staking_amount = get_current_staking_amount(total_vault_locked);
+        let current_balance = current_staking_amount+coin::balance<AptosCoin>(signer::address_of(&config_object_signer));
+
+        let multiplier = fixed_point64::create_from_rational( (lp_amount as u128), ( lp_supply as u128));
+        let withdrawal_amount = (fixed_point64::multiply_u128( (current_balance as u128), multiplier) as u64);
+
+        global.pending_fulfil = global.pending_fulfil+withdrawal_amount;
+
+        vector::push_back( &mut global.request_list, Request {
+            sender: signer::address_of(sender), 
+            amount: withdrawal_amount,
+            timestamp: timestamp::now_seconds()
+        });
+
+        // Burn vault tokens on the sender's account 
+        primary_fungible_store::ensure_primary_store_exists(signer::address_of(sender), global.liquidity_pool.lp_metadata );
+        let lp_store = primary_fungible_store::primary_store(signer::address_of(sender), global.liquidity_pool.lp_metadata );
+        fungible_asset::burn_from(&global.liquidity_pool.lp_burn, lp_store, lp_amount);
+
+        // Emit an event
+        event::emit(
+            RequestWithdraw {
+                lp_amount,
+                withdraw_amount: withdrawal_amount, 
+                timestamp: timestamp::now_seconds(),  
+                sender: signer::address_of(sender)
+            }
+        )
+
+    }
+
+    // Fulfil unstaking requests for everyone in the list
+    public entry fun fulfil_request() acquires MarketManager {
+        let global = borrow_global_mut<MarketManager>(@market_addr);
+        let config_object_signer = object::generate_signer_for_extending(&global.extend_ref);
+
+        assert!( vector::length(&global.request_list) > 0, ERR_EMPTY_LIST );
+
+        let total_amount = 0;
+
+        // Fulfil each eligible request
+        while ( vector::length(&global.request_list) > 0) {
+            let this_request = vector::pop_back(&mut global.request_list);
+            let apt_coin = coin::withdraw<AptosCoin>(&config_object_signer, this_request.amount);
+            coin::deposit(this_request.sender, apt_coin);
+
+            total_amount = total_amount+this_request.amount;
+
+            // Emit an event
+            event::emit(
+                Redeem { 
+                    withdraw_amount: this_request.amount, 
+                    timestamp: timestamp::now_seconds(),  
+                    sender: this_request.sender
+                }
+            );
+        };
+
+        global.pending_fulfil = if (global.pending_fulfil > total_amount) {
+            global.pending_fulfil-total_amount
+        } else {
+            0
+        };
+        
     }
 
     // This allows anyone to execute the payout of winners for a given market round.
@@ -319,16 +505,26 @@ module market_addr::market {
         assert!( available_for_pay >= total_payout_amount, ERR_PAYOUT_NOT_ENOUGH );
 
         count = 0;
+
+        let fee_ratio = fixed_point64::create_from_rational( (global.commission_fee as u128), 10000);
+        let fees = 0; 
         
         // Payout the winnings to each eligible address.
         while ( count < vector::length(&winner_list)) {
             let winner_address = *vector::borrow( &winner_list, count);
             let payout_amount = *vector::borrow( &amount_list, count);
+            let fee_amount = (fixed_point64::multiply_u128( (payout_amount as u128) , fee_ratio) as u64); 
 
-            let payout_coin = coin::withdraw<AptosCoin>(&config_object_signer, payout_amount);
+            let payout_coin = coin::withdraw<AptosCoin>(&config_object_signer, payout_amount-fee_amount);
             coin::deposit(winner_address, payout_coin);
 
+            fees = fees+fee_amount;
             count = count+1;
+        };
+        
+        if (fees > 0) {
+            let payout_coin = coin::withdraw<AptosCoin>(&config_object_signer, fees);
+            coin::deposit(global.treasury_address, payout_coin);
         };
 
         let all_bet_amount = 0;
@@ -345,9 +541,21 @@ module market_addr::market {
         } else {
             0
         };
+        
+        // Emit an event
+        event::emit(
+            PayoutWinnersEvent {
+                round,
+                market_type,
+                from_id,
+                until_id,
+                total_winners: vector::length(&winner_list) ,
+                total_payout_amount,
+                timestamp: timestamp::now_seconds(),  
+                sender: signer::address_of(sender)
+            }
+        )
 
-        // emit event
-        // record who execute
     }
 
     // ======== Public Functions =========
@@ -522,6 +730,12 @@ module market_addr::market {
         (coin::balance<AptosCoin>(signer::address_of(&config_object_signer)))
     }
 
+    #[view]
+    public fun pending_fulfil(): u64 acquires MarketManager {
+        let global = borrow_global<MarketManager>(@market_addr);
+        (global.pending_fulfil)
+    }
+
     // ======== Only Governance =========
 
     // Updates the treasury address that receives the commission fee.
@@ -606,7 +820,20 @@ module market_addr::market {
             global.current_round = round;
         };
 
-        // emit event
+        // Emit an event
+        event::emit(
+            AddMarketEvent {
+                round,
+                market_type,
+                probability_1,
+                probability_2,
+                probability_3,
+                probability_4,
+                expiration,
+                timestamp: timestamp::now_seconds(),  
+                sender: signer::address_of(sender)
+            }
+        )
 
     }
 
@@ -636,7 +863,19 @@ module market_addr::market {
         market_config.probability_3 = probability_3;
         market_config.probability_4 = probability_4;
 
-        // emit event
+        // Emit an event
+        event::emit(
+            UpdateMarketEvent {
+                round,
+                market_type,
+                probability_1,
+                probability_2,
+                probability_3,
+                probability_4, 
+                timestamp: timestamp::now_seconds(),  
+                sender: signer::address_of(sender)
+            }
+        )
     }
 
     // Marks the market as resolved and assigns the winning outcome.
@@ -664,7 +903,16 @@ module market_addr::market {
         market_config.resolved = true;
         market_config.winning_outcome = winning_outcome;
 
-        // emit event
+        // Emit an event
+        event::emit(
+            ResolveMarketEvent {
+                round,
+                market_type,
+                winning_outcome,
+                timestamp: timestamp::now_seconds(),  
+                sender: signer::address_of(sender)
+            }
+        )
     }
 
     // Updates the current round
@@ -680,7 +928,6 @@ module market_addr::market {
         let global = borrow_global_mut<MarketManager>(@market_addr);
         global.liquidity_pool.min_amount = new_value;
     }
-
 
     public entry fun update_withdraw_delay(sender: &signer, new_value: u64) acquires MarketManager {
         verify_admin(signer::address_of(sender));
@@ -729,11 +976,36 @@ module market_addr::market {
         global.max_odds = new_value;
     }
 
-    // stake object --> liquid staking
+    // Stakes the locked APT tokens to Legato's liquid staking vault
+    public entry fun stake_locked_apt_to_legato_vault(sender: &signer, stake_amount: u64) acquires MarketManager {
+        verify_admin(signer::address_of(sender));
+        assert!( stake_amount > 0, ERR_ZERO_VALUE );
 
-    // unstake liquid staking --> object
-
+        let global = borrow_global_mut<MarketManager>(@market_addr);
+        let config_object_signer = object::generate_signer_for_extending(&global.extend_ref);
+        
+        assert!(coin::balance<AptosCoin>(signer::address_of(&config_object_signer)) >= stake_amount, ERR_INSUFFICIENT_AMOUNT);
     
+        vault::mint(&config_object_signer, stake_amount);
+    }
+
+    // Requests to unstake APT tokens from Legato's liquid staking vault
+    public entry fun request_unstake_apt_from_legato_vault(sender: &signer, unstake_amount: u64) acquires MarketManager {
+        verify_admin(signer::address_of(sender));
+        assert!( unstake_amount > 0, ERR_ZERO_VALUE );
+
+        let global = borrow_global_mut<MarketManager>(@market_addr);
+        let config_object_signer = object::generate_signer_for_extending(&global.extend_ref); 
+        let total_vault_locked = primary_fungible_store::balance( signer::address_of(&config_object_signer), vault::get_vault_metadata() );
+        let total_balance_in_vault = get_current_staking_amount(total_vault_locked);
+
+        assert!( total_balance_in_vault >= unstake_amount, ERR_LIQUID_NOT_ENOUGH);
+
+        let ratio = fixed_point64::create_from_rational((unstake_amount as u128), (total_balance_in_vault as u128));
+        let vault_to_unstake = (fixed_point64::multiply_u128( (total_vault_locked as u128) , ratio) as u64);
+
+        vault::request_redeem( &config_object_signer, vault_to_unstake);
+    }
 
     // ======== Internal Functions =========
 
@@ -870,7 +1142,6 @@ module market_addr::market {
             if (entry.is_open == true && entry.round == round && entry.market_type == market_type && timestamp::now_seconds() > market_config.expiration) {
                 vector::push_back( &mut all_ids, count);
                 if ( entry.predicted_outcome == market_config.winning_outcome ) { 
-                    
                     let ratio = fixed_point64::create_from_rational( (entry.placing_odds as u128), 10000 );
                     let winning_amount = (fixed_point64::multiply_u128( (entry.amount as u128) , ratio) as u64); 
                     

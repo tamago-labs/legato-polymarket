@@ -139,9 +139,195 @@ module market_addr::market_tests {
         market::payout_winners( user_2 , 1, 0, 0, 100  );
     
         // Checking final balances 
-        assert!(coin::balance<AptosCoin>(signer::address_of(user_1)) == 25_32199999, 16); // Bets 10 APT and receives 25.32 APT
-        assert!(coin::balance<AptosCoin>(signer::address_of(user_2)) == 9_10169999, 17);  // Bets 3 APT and receives 9.10 APT
+        assert!(coin::balance<AptosCoin>(signer::address_of(user_1)) == 22_78980000, 16); // Bets 10 APT and receives 22.78 APT
+        assert!(coin::balance<AptosCoin>(signer::address_of(user_2)) == 8_19153000, 17);  // Bets 3 APT and receives 8.10 APT
 
+    }
+
+    #[test(vault_deployer = @legato_vault_addr, market_deployer = @market_addr, aptos_framework = @aptos_framework, validator_1 = @0x1111, validator_2 = @0x2222, lp_provider_1 = @0x3333, lp_provider_2 = @0x4444, user_1 = @0x5555, user_2 = @0x6666)]
+    fun test_market_btc_deficit(
+        vault_deployer: &signer,
+        market_deployer: &signer,
+        aptos_framework: &signer,
+        validator_1: &signer, 
+        validator_2: &signer,
+        lp_provider_1: &signer,
+        lp_provider_2: &signer,
+        user_1: &signer,
+        user_2: &signer
+    ) {
+        initialize_for_test(aptos_framework, validator_1, validator_2);
+
+        // Setup the system
+        setup_systems(vault_deployer, market_deployer, signer::address_of(validator_1), signer::address_of(validator_2));
+
+        // Prepare test accounts
+        create_test_accounts( vault_deployer, market_deployer, lp_provider_1, lp_provider_2, user_1, user_2);
+
+        // Add initial tokens
+        add_initial_tokens(validator_1, validator_2);
+
+        // Provide liquidity
+        stake::mint(lp_provider_1, 100 * ONE_APT); 
+        stake::mint(lp_provider_2, 100 * ONE_APT);
+
+        market::provide(lp_provider_1, 100 * ONE_APT);
+        market::provide(lp_provider_2, 100 * ONE_APT);
+
+        // Place bets
+        stake::mint(user_1, 10 * ONE_APT); 
+        stake::mint(user_2, 10 * ONE_APT);
+
+        market::place_bet(user_1, 1, 0, 1, 10 * ONE_APT );
+        market::place_bet(user_2, 1, 0, 1, 10 * ONE_APT );
+        
+        market::resolve_market( market_deployer, 1, 0, 1);
+
+        timestamp::fast_forward_seconds(100*EPOCH_DURATION);
+
+        let (total_winners, total_payout_amount) = market::check_payout_amount( 1, 0, 0, 100 );
+
+        assert!( total_winners == 2, 0 );
+        assert!( total_payout_amount == 49_39399998, 1);
+
+        let available_for_pay = market::available_for_immediate_payout();
+        assert!( available_for_pay == 20_00000000, 2 );
+
+        // Request unstake for 30 APT from the vault
+        market::request_unstake_apt_from_legato_vault(market_deployer, 30_00000000 );
+        
+        // Wait for another 3 epochs to complete the redemption process 
+        let i = 1;  
+        while (i <= 3) {
+            timestamp::fast_forward_seconds(EPOCH_DURATION);
+            end_epoch();
+            i=i+1; // Incrementing the counter
+        };
+
+        // Fulfill the redemption request
+        vault::fulfil_request();
+
+        available_for_pay = market::available_for_immediate_payout();
+
+        market::payout_winners( user_2 , 1, 0, 0, 100  );
+
+        // Checking final balances 
+        assert!(coin::balance<AptosCoin>(signer::address_of(user_1)) == 22_22730000, 3); // Bets 10 APT and receives 22.22 APT
+        assert!(coin::balance<AptosCoin>(signer::address_of(user_2)) == 22_22730000, 4);  // Bets 10 APT and receives 22.22 APT
+
+    }
+
+    #[test(vault_deployer = @legato_vault_addr, market_deployer = @market_addr, aptos_framework = @aptos_framework, validator_1 = @0x1111, validator_2 = @0x2222, lp_provider_1 = @0x3333, lp_provider_2 = @0x4444, user_1 = @0x5555, user_2 = @0x6666)]
+    fun test_market_apt(
+        vault_deployer: &signer,
+        market_deployer: &signer,
+        aptos_framework: &signer,
+        validator_1: &signer, 
+        validator_2: &signer,
+        lp_provider_1: &signer,
+        lp_provider_2: &signer,
+        user_1: &signer,
+        user_2: &signer
+    ) {
+        initialize_for_test(aptos_framework, validator_1, validator_2);
+
+        // Setup the system
+        setup_systems(vault_deployer, market_deployer, signer::address_of(validator_1), signer::address_of(validator_2));
+
+        // Prepare test accounts
+        create_test_accounts( vault_deployer, market_deployer, lp_provider_1, lp_provider_2, user_1, user_2);
+
+        // Add initial tokens
+        add_initial_tokens(validator_1, validator_2);
+
+        // Provide liquidity
+        stake::mint(lp_provider_1, 100 * ONE_APT); 
+        stake::mint(lp_provider_2, 100 * ONE_APT);
+
+        market::provide(lp_provider_1, 100 * ONE_APT);
+        market::provide(lp_provider_2, 100 * ONE_APT);
+
+        // Place bets
+        stake::mint(user_1, 10 * ONE_APT); 
+        stake::mint(user_2, 10 * ONE_APT);
+
+        market::place_bet(user_1, 1, 1, 1, 10 * ONE_APT );
+        market::place_bet(user_2, 1, 1, 2, 10 * ONE_APT );
+
+        market::resolve_market( market_deployer, 1, 1, 1);
+
+        timestamp::fast_forward_seconds(100*EPOCH_DURATION);
+
+        let (total_winners, total_payout_amount) = market::check_payout_amount( 1, 1, 0, 100 );
+
+        assert!( total_winners == 1, 0 );
+        assert!( total_payout_amount == 15_38599999, 1);
+
+        market::payout_winners( user_1 , 1, 1, 0, 100  );
+
+        // Checking final balances  
+        assert!(coin::balance<AptosCoin>(signer::address_of(user_1)) == 13_84740000, 3); // Bets 10 APT and receives 15.38 APT
+    }
+
+    #[test(vault_deployer = @legato_vault_addr, market_deployer = @market_addr, aptos_framework = @aptos_framework, validator_1 = @0x1111, validator_2 = @0x2222, lp_provider_1 = @0x3333, lp_provider_2 = @0x4444, user_1 = @0x5555, user_2 = @0x6666)]
+    fun test_withdraw_lp(
+        vault_deployer: &signer,
+        market_deployer: &signer,
+        aptos_framework: &signer,
+        validator_1: &signer, 
+        validator_2: &signer,
+        lp_provider_1: &signer,
+        lp_provider_2: &signer,
+        user_1: &signer,
+        user_2: &signer
+    ) {
+
+        initialize_for_test(aptos_framework, validator_1, validator_2);
+
+        // Setup the system
+        setup_systems(vault_deployer, market_deployer, signer::address_of(validator_1), signer::address_of(validator_2));
+
+        // Prepare test accounts
+        create_test_accounts( vault_deployer, market_deployer, lp_provider_1, lp_provider_2, user_1, user_2);
+
+        // Add initial tokens
+        add_initial_tokens(validator_1, validator_2);
+
+        // Provide liquidity
+        stake::mint(lp_provider_1, 10 * ONE_APT); 
+        stake::mint(lp_provider_2, 10 * ONE_APT);
+
+        market::provide(lp_provider_1, 10 * ONE_APT);
+        market::provide(lp_provider_2, 10 * ONE_APT);
+
+        // Place bets on the second outcome
+        stake::mint(user_1, 10 * ONE_APT); 
+        stake::mint(user_2, 10 * ONE_APT);
+
+        market::place_bet(user_1, 1, 1, 2, 10 * ONE_APT );
+        market::place_bet(user_2, 1, 1, 2, 10 * ONE_APT );
+
+        // Resolve the market by setting the winning outcome to outcome 1.
+        market::resolve_market( market_deployer, 1, 1, 1);
+
+        timestamp::fast_forward_seconds(100*EPOCH_DURATION);
+
+        market::payout_winners( user_1 , 1, 1, 0, 100  );
+
+        let lp_metadata = market::get_lp_metadata(); 
+        let lp_share = primary_fungible_store::balance( signer::address_of(lp_provider_1), lp_metadata );
+
+        market::request_withdraw(lp_provider_1 ,lp_share);
+
+        let pending = market::pending_fulfil();
+        let available = market::available_for_immediate_payout();
+
+        assert!( available > pending, 0 );
+
+        market::fulfil_request();
+
+        // Checking final balances 
+        assert!(coin::balance<AptosCoin>(signer::address_of(lp_provider_1)) == 19_74054120, 1);
     }
 
     #[test_only]
@@ -182,6 +368,9 @@ module market_addr::market_tests {
 
         account::create_account_for_test( vault::get_config_object_address() ); 
         account::create_account_for_test( market::get_config_object_address() );
+
+        coin::register<AptosCoin>(vault_deployer);
+        coin::register<AptosCoin>(market_deployer);
     }
 
 
