@@ -513,6 +513,8 @@ module market_addr::market_tests {
             timestamp::now_seconds()+(100*EPOCH_DURATION)
         );
 
+        market::update_commission_fee(market_deployer, 1000);
+
     }
 
     #[test_only]

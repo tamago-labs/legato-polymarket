@@ -32,7 +32,7 @@ module market_addr::market {
     // ======== Constants ========
 
     const SCALE: u64 = 10000; // Scaling factor for fixed-point calculations
-    const DEFAULT_COMMISSION_FEE: u64 = 1000; // Default commission fee
+    const DEFAULT_COMMISSION_FEE: u64 = 2000; // Default commission fee
     const DEFAULT_RESERVE_RATIO: u64 = 8000; // Default reserve ratio
     const DEFAULT_WITHDRAW_DELAY: u64 = 259200; // Default withdrawal delay, set to 3 days
     const DEFAULT_WEIGHT: u64 = 7000; // Default weight, 70%
@@ -76,9 +76,10 @@ module market_addr::market {
         probability_2: u64, // Probability assigned to outcome 2
         probability_3: u64, // Probability assigned to outcome 3
         probability_4: u64, // Probability assigned to outcome 4
+        ratio: u64, // A ratio used to adjust the odds, default is 1.0
         resolved: bool, // Whether the market has been resolved
         winning_outcome: u8, // 0 = unresolved, 1 = Outcome 1 wins...
-        expiration: u64 
+        expiration: u64
     }
 
     // Tracks a user's bet in the prediction market
@@ -173,6 +174,7 @@ module market_addr::market {
         probability_2: u64,
         probability_3: u64,
         probability_4: u64,
+        ratio: u64,
         expiration: u64,
         timestamp: u64,
         sender: address
@@ -186,6 +188,7 @@ module market_addr::market {
         probability_2: u64,
         probability_3: u64,
         probability_4: u64,
+        ratio: u64,
         timestamp: u64, 
         sender: address
     }
@@ -305,7 +308,7 @@ module market_addr::market {
         let (l_outcome, p_outcome) = update_market_outcomes( market_config, bet_outcome, bet_amount );
         let total_liquidity = total_outcomes(market_config);
 
-        let p_adjusted = calculate_p_adjusted(p_outcome, global.weight, l_outcome, total_liquidity);
+        let p_adjusted = calculate_p_adjusted(p_outcome, global.weight, l_outcome, total_liquidity, market_config.ratio);
 
         let placing_odds = calculate_odds( p_adjusted, global.max_odds );
 
@@ -644,13 +647,13 @@ module market_addr::market {
     }
 
     #[view]
-    public fun get_market_info(round: u64, market_type: u8): (vector<u64>, vector<u64>, bool, u8, u64) acquires MarketManager {
+    public fun get_market_info(round: u64, market_type: u8): (vector<u64>, vector<u64>, bool, u8, u64, u64) acquires MarketManager {
         get_market_info_internal(round, market_type)
     }
 
     #[view]
     public fun get_market_adjusted_probabilities(round: u64, market_type: u8): (vector<u64>) acquires MarketManager {
-        let (liquidity_outcome_list, p_outcome_list, _, _, _ ) = get_market_info_internal(round, market_type);
+        let (liquidity_outcome_list, p_outcome_list, _, _, _, ratio ) = get_market_info_internal(round, market_type);
         let total_liquidity = get_total_vault_balance();
 
         let global = borrow_global<MarketManager>(@market_addr);
@@ -663,7 +666,7 @@ module market_addr::market {
         while (count < 4) {
             let l_outcome = *vector::borrow( &liquidity_outcome_list, count );
             let p_outcome = *vector::borrow( &p_outcome_list, count );
-            let p_adjusted = calculate_p_adjusted(p_outcome, global_weight, l_outcome, total_liquidity );
+            let p_adjusted = calculate_p_adjusted(p_outcome, global_weight, l_outcome, total_liquidity, ratio );
             vector::push_back(&mut output, p_adjusted);
             count = count+1;
         };
@@ -799,6 +802,7 @@ module market_addr::market {
             probability_2,
             probability_3,
             probability_4,
+            ratio: 10000,
             resolved: false,
             winning_outcome: 0,
             expiration
@@ -829,6 +833,7 @@ module market_addr::market {
                 probability_2,
                 probability_3,
                 probability_4,
+                ratio: 10000,
                 expiration,
                 timestamp: timestamp::now_seconds(),  
                 sender: signer::address_of(sender)
@@ -838,7 +843,7 @@ module market_addr::market {
     }
 
     // Updates the market outcome probabilities.
-    public entry fun set_market_probabilities(sender: &signer, round: u64, market_type: u8, probability_1: u64, probability_2: u64, probability_3: u64, probability_4: u64) acquires MarketManager {
+    public entry fun set_market_probabilities(sender: &signer, round: u64, market_type: u8, probability_1: u64, probability_2: u64, probability_3: u64, probability_4: u64, ratio: u64) acquires MarketManager {
         verify_admin(signer::address_of(sender));
         assert!( round > 0, ERR_INVALID_VALUE );
         assert!( market_type == 0 || market_type == 1 || market_type == 2, ERR_INVALID_VALUE);
@@ -862,6 +867,7 @@ module market_addr::market {
         market_config.probability_2 = probability_2;
         market_config.probability_3 = probability_3;
         market_config.probability_4 = probability_4;
+        market_config.ratio = ratio;
 
         // Emit an event
         event::emit(
@@ -872,6 +878,7 @@ module market_addr::market {
                 probability_2,
                 probability_3,
                 probability_4, 
+                ratio,
                 timestamp: timestamp::now_seconds(),  
                 sender: signer::address_of(sender)
             }
@@ -1027,7 +1034,7 @@ module market_addr::market {
         (result as u64)
     }
 
-    fun get_market_info_internal(round: u64, market_type: u8): (vector<u64>, vector<u64>, bool, u8, u64) acquires MarketManager {
+    fun get_market_info_internal(round: u64, market_type: u8): (vector<u64>, vector<u64>, bool, u8, u64, u64) acquires MarketManager {
         assert!( round > 0, ERR_INVALID_VALUE );
         assert!( market_type == 0 || market_type == 1 || market_type == 2, ERR_INVALID_VALUE);
 
@@ -1057,11 +1064,11 @@ module market_addr::market {
         vector::push_back(&mut probabilities,  market_config.probability_3);
         vector::push_back(&mut probabilities,  market_config.probability_4);
 
-        (total_bets, probabilities, market_config.resolved, market_config.winning_outcome, market_config.expiration)
+        (total_bets, probabilities, market_config.resolved, market_config.winning_outcome, market_config.expiration, market_config.ratio)
     }
 
     // P(adjusted) = P(outcome) * weight + (L(outcome) / L(pool)) * (1 - weight)
-    fun calculate_p_adjusted(p_outcome: u64, weight: u64, l_outcome: u64, l_pool: u64) : u64 {
+    fun calculate_p_adjusted(p_outcome: u64, weight: u64, l_outcome: u64, l_pool: u64, ratio: u64) : u64 {
         let weight_ratio = fixed_point64::create_from_rational( (weight as u128), 10000 );
         let weighted_probability = fixed_point64::multiply_u128( (p_outcome as u128) , weight_ratio); 
 
@@ -1069,7 +1076,10 @@ module market_addr::market {
         let liquidity_ratio = fixed_point64::create_from_rational( (l_outcome as u128), (l_pool as u128) );
         let liquidity_contribution = fixed_point64::multiply_u128( ((10000-weight) as u128), liquidity_ratio); 
 
-        ((weighted_probability+liquidity_contribution) as u64)
+        let normalized_ratio = fixed_point64::create_from_rational( (ratio as u128), 10000 );
+        let result = fixed_point64::multiply_u128(  weighted_probability+liquidity_contribution, normalized_ratio); 
+
+        (result as u64)
     }
 
     fun update_market_outcomes(market_config: &mut MarketConfig, bet_outcome: u8, bet_amount: u64): (u64, u64) {
