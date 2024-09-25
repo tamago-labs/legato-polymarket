@@ -86,7 +86,7 @@ module market_addr::market_tests {
 
         // Check adjusted probabilities
         let adjusted_probabilities = market::get_market_adjusted_probabilities(1, 0);
-        assert!(adjusted_probabilities == vector[ 1049, 2449, 2449, 1049 ], 3);
+        assert!(adjusted_probabilities == vector[ 1500, 3500, 3500, 1500 ], 3);
 
         // Place bets
         stake::mint(user_1, 40 * ONE_APT); 
@@ -101,7 +101,7 @@ module market_addr::market_tests {
         adjusted_probabilities = market::get_market_adjusted_probabilities(1, 0);
 
         assert!( available == 8_35196086, 4 );
-        assert!(adjusted_probabilities == vector[ 1545, 2945, 2945, 1545 ], 5);
+        assert!(adjusted_probabilities == vector[ 3148, 5598, 5598, 3148 ], 5);
 
         market::place_bet(user_2, 1, 0, 1, 3 * ONE_APT );
         market::place_bet(user_2, 1, 0, 2, 3 * ONE_APT );
@@ -113,7 +113,7 @@ module market_addr::market_tests {
         assert!( market::get_bet_position_ids( 0, signer::address_of( user_2 ) ) == vector[ 4, 5, 6, 7 ] ,7);
 
         let (_, placing_odds, bet_amount, predicted, _, _, is_open) = market::get_bet_position( 1 );
-        assert!( placing_odds == 25322, 8); // at 2.5322
+        assert!( placing_odds == 14471, 8); // at 1.44
         assert!( bet_amount == 10_00000000, 9); // 10 APT
         assert!( predicted == 2, 10); // Choice#2
         assert!( is_open == true, 11); 
@@ -123,7 +123,6 @@ module market_addr::market_tests {
         assert!(pool_size == 72_43995108, 12);
 
         // Resolves the market and fast-forwards the system clock
-
         market::resolve_market( market_deployer, 1, 0, 2);
 
         timestamp::fast_forward_seconds(100*EPOCH_DURATION);
@@ -131,16 +130,16 @@ module market_addr::market_tests {
         let (total_winners, total_payout_amount) = market::check_payout_amount( 1, 0, 0, 100 );
 
         assert!( total_winners == 2, 13 );
-        assert!( total_payout_amount == 34_42369998, 14);
+        assert!( total_payout_amount == 19_67209998, 14);
 
         let available_for_pay = market::available_for_immediate_payout();
         assert!( available_for_pay == 52_00000000, 15 );
     
         market::payout_winners( user_2 , 1, 0, 0, 100  );
     
-        // Checking final balances 
-        assert!(coin::balance<AptosCoin>(signer::address_of(user_1)) == 22_78980000, 16); // Bets 10 APT and receives 22.78 APT
-        assert!(coin::balance<AptosCoin>(signer::address_of(user_2)) == 8_19153000, 17);  // Bets 3 APT and receives 8.10 APT
+        // Checking final balances  
+        assert!(coin::balance<AptosCoin>(signer::address_of(user_1)) == 13_02390000, 16); // Bets 10 APT and receives 13.02 APT
+        assert!(coin::balance<AptosCoin>(signer::address_of(user_2)) == 4_68099000, 17);  // Bets 3 APT and receives 4.68 APT
 
     }
 
@@ -187,11 +186,11 @@ module market_addr::market_tests {
 
         let (total_winners, total_payout_amount) = market::check_payout_amount( 1, 0, 0, 100 );
 
-        assert!( total_winners == 2, 0 );
-        assert!( total_payout_amount == 49_39399998, 1);
+        assert!( total_winners == 2, 0 ); 
+        assert!( total_payout_amount == 28_22799998, 1);
 
         let available_for_pay = market::available_for_immediate_payout();
-        assert!( available_for_pay == 20_00000000, 2 );
+        assert!( available_for_pay == 20_00000000, 2 ); 
 
         // Request unstake for 30 APT from the vault
         market::request_unstake_apt_from_legato_vault(market_deployer, 30_00000000 );
@@ -211,9 +210,9 @@ module market_addr::market_tests {
 
         market::payout_winners( user_2 , 1, 0, 0, 100  );
 
-        // Checking final balances 
-        assert!(coin::balance<AptosCoin>(signer::address_of(user_1)) == 22_22730000, 3); // Bets 10 APT and receives 22.22 APT
-        assert!(coin::balance<AptosCoin>(signer::address_of(user_2)) == 22_22730000, 4);  // Bets 10 APT and receives 22.22 APT
+        // Checking final balances  
+        assert!(coin::balance<AptosCoin>(signer::address_of(user_1)) == 12_70260000, 3); // Bets 10 APT and receives 12.70 APT
+        assert!(coin::balance<AptosCoin>(signer::address_of(user_2)) == 12_70260000, 4);  // Bets 10 APT and receives 12.70 APT
 
     }
 
@@ -261,12 +260,12 @@ module market_addr::market_tests {
         let (total_winners, total_payout_amount) = market::check_payout_amount( 1, 1, 0, 100 );
 
         assert!( total_winners == 1, 0 );
-        assert!( total_payout_amount == 15_38599999, 1);
+        assert!( total_payout_amount == 8_79199999, 1); 
 
         market::payout_winners( user_1 , 1, 1, 0, 100  );
 
-        // Checking final balances  
-        assert!(coin::balance<AptosCoin>(signer::address_of(user_1)) == 13_84740000, 3); // Bets 10 APT and receives 15.38 APT
+        // Checking final balances   
+        assert!(coin::balance<AptosCoin>(signer::address_of(user_1)) == 7_91280000, 3); // Bets 10 APT and receives 7.91 APT
     }
 
     #[test(vault_deployer = @legato_vault_addr, market_deployer = @market_addr, aptos_framework = @aptos_framework, validator_1 = @0x1111, validator_2 = @0x2222, lp_provider_1 = @0x3333, lp_provider_2 = @0x4444, user_1 = @0x5555, user_2 = @0x6666)]
@@ -326,7 +325,7 @@ module market_addr::market_tests {
 
         market::fulfil_request();
 
-        // Checking final balances 
+        // Checking final balances  
         assert!(coin::balance<AptosCoin>(signer::address_of(lp_provider_1)) == 19_74054120, 1);
     }
 
@@ -514,6 +513,8 @@ module market_addr::market_tests {
         );
 
         market::update_commission_fee(market_deployer, 1000);
+        
+
 
     }
 
