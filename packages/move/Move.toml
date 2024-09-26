@@ -4,7 +4,7 @@ version = "0.1.0"
 authors = []
 
 [addresses]
-market_addr = "29619f079dd4fccc3acae121e9c329589ab1209c51b64bca42da3540e956c868"
+market_addr = "3de3ff1f80b7fce6dff30ebddedf09977328a0b4f958a6d942731a696816cb31"
 legato_vault_addr = "45fa42f6840a7032a97d4d66a45a776be0b8d73bb54182cee82cc41cc7d9a962"
 aptos_framework = "0x1"
 aptos_fungible_asset = "0xA"

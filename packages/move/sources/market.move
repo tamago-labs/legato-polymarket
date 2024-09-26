@@ -32,7 +32,7 @@ module market_addr::market {
     // ======== Constants ========
 
     const SCALE: u64 = 10000; // Scaling factor for fixed-point calculations
-    const DEFAULT_COMMISSION_FEE: u64 = 2000; // Default commission fee
+    const DEFAULT_COMMISSION_FEE: u64 = 1000; // Default commission fee
     const DEFAULT_RESERVE_RATIO: u64 = 8000; // Default reserve ratio
     const DEFAULT_WITHDRAW_DELAY: u64 = 259200; // Default withdrawal delay, set to 3 days
     const DEFAULT_WEIGHT: u64 = 7000; // Default weight, 70%

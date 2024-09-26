@@ -9,7 +9,8 @@
       "start": "run-p --print-label package:*",
       "build": "lerna run --parallel build",
       "package:engine": "lerna run --scope engine --stream dev",
-      "test": "lerna run test --concurrency 1 --stream --scope move"
+      "test": "lerna run test --concurrency 1 --stream --scope move",
+      "test-engine": "lerna run --scope engine --stream test"
     },
     "devDependencies": {
       "lerna": "^6.6.2",
