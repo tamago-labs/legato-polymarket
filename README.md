@@ -2,6 +2,8 @@
 
 **Polymarket, built for Move, powered by AI**
 
+![Screencast2024-09-25153313-ezgif com-video-to-gif-converter](https://github.com/user-attachments/assets/22e2dac8-5588-4f95-928b-1145837c362c)
+
 Legato’s new DeFi's prediction market product, developed at the Aptos Code Collision Hackathon and now live on Mainnet, letting users predict various outcomes from BTC prices to custom markets tied to trending topics.
 
 The project uses AI's LLM to analyze external data, such as historical prices and news, to set probabilities for each outcome, leading to real-time dynamic odds that balance liquidity providers and bettors within the system.
