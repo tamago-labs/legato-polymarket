@@ -161,6 +161,15 @@ The engine itself can also run with the following components to read the provide
 npm run package:engine
 ```
 
+## Deployment
+
+### Aptos Mainnet
+
+Component Name | ID
+--- | --- 
+Market Contract |  0x3de3ff1f80b7fce6dff30ebddedf09977328a0b4f958a6d942731a696816cb31
+LP Metadata | 0x6d4acd6d6f6506af452abe82fc0fe6b987346f232e1428adfea5411859800e75
+
 ## Roadmap
 
 Currently, we've deployed the MVP of our prediction market including the AI engine live on Aptos Mainnet and we're looking forward to building more sophisticated features that enable market creation by users and expanding to other chains. 
