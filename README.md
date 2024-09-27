@@ -113,6 +113,25 @@ Before anyone can bet on an outcome, liquidity must be added to the liquidity po
 
 Since all APT are staked (or pending staking), when withdrawing, we need to request a withdrawal and wait up to 3 days for the vault to complete the unstaking process from the validator. Once completed, APT will be transferred to the original wallet automatically.
 
+## How to Use
+
+Navigate to https://legato.finance and go to the market section then perform the following actions:
+
+**1. Connect The Wallet**
+
+* Click connect and choose your preferred wallet (e.g., Petra, Martian) and authorize the connection.
+* Ensure your wallet is funded with APT to participate in betting or provide liquidity.
+
+**2. Place a Bet**
+
+* Select a market (BTC or APT) and review the available outcomes and their current odds.
+* Choose the outcome you want to bet on, enter the amount of APT and confirm the transaction.
+* Once the bet is placed, your odds will lock in and the system will automatically update your position.
+
+**3. Claim Rewards**
+
+* If you have a winning bet, your rewards will be transferred directly to your wallet after the round concludes.
+
 ## How to Test
 
 
@@ -141,6 +160,12 @@ The engine itself can also run with the following components to read the provide
 ```
 npm run package:engine
 ```
+
+## Roadmap
+
+Currently, we've deployed the MVP of our prediction market including the AI engine live on Aptos Mainnet and we're looking forward to building more sophisticated features that enable market creation by users and expanding to other chains. 
+
+This repo contains only the early version of the project. More updates, including new features and improvements, will be merged into the main [Legato repo](https://github.com/tamago-labs/legato-finance).
 
 ## License
 
