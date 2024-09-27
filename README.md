@@ -165,7 +165,7 @@ npm run package:engine
 
 ### Aptos Mainnet
 
-Component Name | ID
+Component Name | ID/Address
 --- | --- 
 Market Contract |  0x3de3ff1f80b7fce6dff30ebddedf09977328a0b4f958a6d942731a696816cb31
 LP Metadata | 0x6d4acd6d6f6506af452abe82fc0fe6b987346f232e1428adfea5411859800e75
